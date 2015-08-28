@@ -31,6 +31,7 @@ import org.jboss.as.naming.context.external.ExternalContextsNavigableSet;
 import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.deployment.ExternalContextsProcessor;
 import org.jboss.as.naming.deployment.JndiNamingDependencyProcessor;
+import org.jboss.as.naming.deployment.SubsystemJndiNamingDependencyProcessor;
 import org.jboss.as.naming.management.JndiViewExtensionRegistry;
 import org.jboss.as.naming.service.DefaultNamespaceContextSelectorService;
 import org.jboss.as.naming.service.ExternalContextsService;
@@ -113,6 +114,7 @@ public class NamingSubsystemAdd extends AbstractBoottimeAddStepHandler {
             protected void execute(DeploymentProcessorTarget processorTarget) {
                 processorTarget.addDeploymentProcessor(NamingExtension.SUBSYSTEM_NAME, Phase.STRUCTURE, Phase.STRUCTURE_NAMING_EXTERNAL_CONTEXTS, new ExternalContextsProcessor(externalContexts));
                 processorTarget.addDeploymentProcessor(NamingExtension.SUBSYSTEM_NAME, Phase.INSTALL, Phase.INSTALL_JNDI_DEPENDENCIES, new JndiNamingDependencyProcessor());
+                processorTarget.addDeploymentProcessor(NamingExtension.SUBSYSTEM_NAME, Phase.INSTALL, Phase.INSTALL_JNDI_DEPENDENCIES, new SubsystemJndiNamingDependencyProcessor());
             }
         }, OperationContext.Stage.RUNTIME);
 

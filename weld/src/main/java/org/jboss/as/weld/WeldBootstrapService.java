@@ -129,25 +129,9 @@ public class WeldBootstrapService implements Service<WeldBootstrapService> {
     }
 
     /**
-     * Stops the container
-     *
-     * @throws IllegalStateException if the container is not running
+     * This is a no-op, the actual shutdown is performed in {@link WeldStartService#stop(org.jboss.msc.service.StopContext)}
      */
     public synchronized void stop(final StopContext context) {
-        if (!started) {
-            throw WeldLogger.ROOT_LOGGER.notStarted("WeldContainer");
-        }
-        WeldLogger.DEPLOYMENT_LOGGER.stoppingWeldService(deploymentName);
-        ClassLoader oldTccl = WildFlySecurityManager.getCurrentContextClassLoaderPrivileged();
-        try {
-            WildFlySecurityManager.setCurrentContextClassLoaderPrivileged(deployment.getModule().getClassLoader());
-            WeldProvider.containerShutDown(Container.instance(deploymentName));
-            bootstrap.shutdown();
-        } finally {
-            WildFlySecurityManager.setCurrentContextClassLoaderPrivileged(oldTccl);
-            ModuleGroupSingletonProvider.removeClassLoader(deployment.getModule().getClassLoader());
-        }
-        started = false;
     }
 
     /**
@@ -194,12 +178,24 @@ public class WeldBootstrapService implements Service<WeldBootstrapService> {
         return new HashSet<BeanDeploymentArchive>(beanDeploymentArchives.values());
     }
 
-    public boolean isStarted() {
+    boolean isStarted() {
         return started;
+    }
+
+    void setStarted(boolean started) {
+        this.started = started;
     }
 
     WeldBootstrap getBootstrap() {
         return bootstrap;
+    }
+
+    WeldDeployment getDeployment() {
+        return deployment;
+    }
+
+    String getDeploymentName() {
+        return deploymentName;
     }
 
     @Override

@@ -44,6 +44,7 @@ import org.jboss.as.jpa.config.Configuration;
 import org.jboss.as.jpa.config.PersistenceUnitMetadataHolder;
 import org.jboss.as.jpa.service.PersistenceUnitServiceImpl;
 import org.jboss.as.naming.deployment.JndiNamingDependencyProcessor;
+import org.jboss.as.naming.deployment.SubsystemJndiNamingDependencyProcessor;
 import org.jboss.as.security.service.SimpleSecurityManager;
 import org.jboss.as.security.service.SimpleSecurityManagerService;
 import org.jboss.as.server.deployment.Attachments;
@@ -267,6 +268,10 @@ public class WeldDeploymentProcessor implements DeploymentUnitProcessor {
 
         weldBootstrapServiceBuilder.addDependencies(TCCLSingletonService.SERVICE_NAME);
         weldBootstrapServiceBuilder.addDependency(WeldExecutorServices.SERVICE_NAME, ExecutorServices.class, weldBootstrapService.getExecutorServices());
+
+//        Can't depend on JndiNamingDependencyProcessor as it depends on BeanmanagerService which depends on WeldBootStrapService - causing a cyclic dependency
+//        Therefore we depend on SubsystemJndiNamingDependencyProcessor as it depends on transaction services but not JndiNamingDependencyProcessor
+        weldBootstrapServiceBuilder.addDependency(SubsystemJndiNamingDependencyProcessor.serviceName(deploymentUnit));
 
         installSecurityService(serviceTarget, deploymentUnit, weldBootstrapService, weldBootstrapServiceBuilder);
         installTransactionService(serviceTarget, deploymentUnit, weldBootstrapService, weldBootstrapServiceBuilder);

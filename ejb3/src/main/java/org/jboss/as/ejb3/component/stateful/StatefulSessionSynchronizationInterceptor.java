@@ -38,6 +38,8 @@ import org.jboss.invocation.InterceptorContext;
 import org.jboss.invocation.InterceptorFactory;
 import org.jboss.invocation.InterceptorFactoryContext;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.jboss.as.ejb3.logging.EjbLogger.ROOT_LOGGER;
 import static org.jboss.as.ejb3.component.stateful.StatefulComponentInstanceInterceptor.getComponentInstance;
 
@@ -48,6 +50,15 @@ import static org.jboss.as.ejb3.component.stateful.StatefulComponentInstanceInte
  * @author Jaikiran Pai
  */
 public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterceptor {
+
+    // ThreadLocal required as a single StatefulSessionSynchronization instance is used for all calls to a specific SFSB
+    // If worker thread is re-used in the future, then SynchronizationCallbackHandler state will have been reset in processInvocation finally statement
+    private final ThreadLocal<SynchronizationCallbackHandler> callbackHandlerThreadLocal = new ThreadLocal<SynchronizationCallbackHandler>() {
+        @Override
+        protected SynchronizationCallbackHandler initialValue() {
+            return new SynchronizationCallbackHandler();
+        }
+    };
 
     private final boolean containerManagedTransactions;
 
@@ -92,6 +103,8 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
             Object currentTransactionKey = null;
             boolean wasTxSyncRegistered = false;
+            final SynchronizationCallbackHandler callbackHandler = this.callbackHandlerThreadLocal.get();
+            callbackHandler.enterInvocation();
             try {
                 //we never register a sync for bean managed transactions
                 //the inner BMT interceptor is going to setup the correct transaction anyway
@@ -105,7 +118,8 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                         // if the thread is currently associated with a tx, then register a tx synchronization
                         if (currentTransactionKey != null && status != Status.STATUS_COMMITTED && status != Status.STATUS_ROLLEDBACK) {
                             // register a tx synchronization for this SFSB instance
-                            final Synchronization statefulSessionSync = new StatefulSessionSynchronization(instance, lockOwner);
+                            final Synchronization statefulSessionSync = new StatefulSessionSynchronization(instance, callbackHandler);
+
                             transactionSynchronizationRegistry.registerInterposedSynchronization(statefulSessionSync);
                             wasTxSyncRegistered = true;
                             if (ROOT_LOGGER.isTraceEnabled()) {
@@ -116,6 +130,8 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                             instance.afterBegin();
                             instance.setSynchronizationRegistered(true);
                             context.putPrivateData(StatefulTransactionMarker.class, StatefulTransactionMarker.of(true));
+                        } else if (status == Status.STATUS_ROLLEDBACK) {
+                            return null; // Tx has rolledback, no need to execute method
                         }
                     } else {
                         context.putPrivateData(StatefulTransactionMarker.class, StatefulTransactionMarker.of(false));
@@ -139,6 +155,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                         instance.getComponent().getCache().release(instance);
                     }
                 }
+                callbackHandler.leaveInvocation();
             }
         }
     }
@@ -202,11 +219,12 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
     private class StatefulSessionSynchronization implements Synchronization {
 
         private final StatefulSessionComponentInstance statefulSessionComponentInstance;
-        private final Object lockOwner;
+        private final SynchronizationCallbackHandler callbackHandler;
 
-        StatefulSessionSynchronization(StatefulSessionComponentInstance statefulSessionComponentInstance, final Object lockOwner) {
+        StatefulSessionSynchronization(StatefulSessionComponentInstance statefulSessionComponentInstance,
+                SynchronizationCallbackHandler syncStatus) {
             this.statefulSessionComponentInstance = statefulSessionComponentInstance;
-            this.lockOwner = lockOwner;
+            this.callbackHandler = syncStatus;
         }
 
         @Override
@@ -226,6 +244,8 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
         @Override
         public void afterCompletion(int status) {
+            callbackHandler.enterAfterCompletion();
+
             boolean committed = status == Status.STATUS_COMMITTED;
             try {
                 if (ROOT_LOGGER.isTraceEnabled()) {
@@ -248,6 +268,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
             // tx has completed, so mark the SFSB instance as no longer in use
             releaseInstance(statefulSessionComponentInstance);
+            callbackHandler.leaveAfterCompletion();
         }
 
         private void handleThrowable(Throwable t) {
@@ -268,4 +289,35 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
         }
     }
 
+    private class SynchronizationCallbackHandler {
+        private final static int OUTSIDE_INVOCATION = 0;
+        private final static int IN_INVOCATION = 1;
+        private final static int IN_AFTER_COMPLETION = 2;
+
+        private final AtomicInteger state = new AtomicInteger(OUTSIDE_INVOCATION);
+
+        void enterInvocation() {
+            casLoop(state, OUTSIDE_INVOCATION, IN_INVOCATION);
+        }
+
+        void leaveInvocation() {
+            for (;;)
+                if (state.compareAndSet(IN_INVOCATION, OUTSIDE_INVOCATION) || state.compareAndSet(OUTSIDE_INVOCATION, OUTSIDE_INVOCATION))
+                    return;
+        }
+
+        void enterAfterCompletion() {
+            casLoop(state, OUTSIDE_INVOCATION, IN_AFTER_COMPLETION);
+        }
+
+        void leaveAfterCompletion() {
+            casLoop(state, IN_AFTER_COMPLETION, OUTSIDE_INVOCATION);
+        }
+
+        void casLoop(AtomicInteger atomic, int expected, int update) {
+            for (;;)
+                if (atomic.compareAndSet(expected, update))
+                    return;
+        }
+    }
 }

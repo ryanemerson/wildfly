@@ -21,15 +21,6 @@
  */
 package org.jboss.as.ejb3.component.stateful;
 
-import java.io.ObjectStreamException;
-import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-
-import javax.ejb.EJBException;
-import javax.transaction.Transaction;
-
 import org.jboss.as.ee.component.Component;
 import org.jboss.as.ee.component.ComponentInstance;
 import org.jboss.as.ejb3.cache.Contextual;
@@ -41,6 +32,16 @@ import org.jboss.as.naming.ManagedReference;
 import org.jboss.ejb.client.SessionID;
 import org.jboss.invocation.Interceptor;
 import org.jboss.invocation.InterceptorContext;
+
+import javax.ejb.EJBException;
+import javax.transaction.Transaction;
+import java.io.ObjectStreamException;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * @author <a href="mailto:cdewolf@redhat.com">Carlo de Wolf</a>
@@ -72,10 +73,12 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
      */
     private boolean synchronizationRegistered = false;
 
+    private AtomicBoolean delayedAfterCompletion = new AtomicBoolean(false);
+
     /**
      * The thread based lock for the stateful bean
      */
-    private final Object threadLock = new Object();
+    private final ReentrantLock threadLock = new ReentrantLock();
     private boolean removed = false;
 
     boolean isSynchronizationRegistered() {
@@ -86,7 +89,7 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
         this.synchronizationRegistered = synchronizationRegistered;
     }
 
-    Object getThreadLock() {
+    ReentrantLock getThreadLock() {
         return threadLock;
     }
 
@@ -231,5 +234,9 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     @Override
     public void setCacheContext(Object context) {
         this.setInstanceData(Contextual.class, context);
+    }
+
+    AtomicBoolean delayedAfterCompletion() {
+        return delayedAfterCompletion;
     }
 }

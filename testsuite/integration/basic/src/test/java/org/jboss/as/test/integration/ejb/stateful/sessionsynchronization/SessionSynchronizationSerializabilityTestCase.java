@@ -31,9 +31,11 @@ import org.jboss.shrinkwrap.api.asset.EmptyAsset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import javax.ejb.EJBTransactionRolledbackException;
 import javax.inject.Inject;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -79,23 +81,44 @@ public class SessionSynchronizationSerializabilityTestCase {
         return jar;
     }
 
-        @Test // Throws ConcurrentAccessException if callbacks are not serialized
-        public void testSerializationOfBeanMethodsAndCallbacks() throws Exception {
-            SessionSynchBeanImpl syncTestBean = lookup(SessionSynchBeanImpl.class);
-            try {
-                utx.setTransactionTimeout(5);
-                utx.begin();
-                for (int j = 0; j < 2; j++) {
-                    syncTestBean.method1();
-                    syncTestBean.method2();
-                }
-                utx.commit();
-            } catch (RollbackException e) {
-                Assert.assertTrue(e.getMessage().startsWith("ARJUNA016102: The transaction is not active!"));
+    @Before
+    public void resetBeanCounters() {
+        SessionSynchBeanImpl.afterBegin.set(0);
+        SessionSynchBeanImpl.beforeCompletion.set(0);
+        SessionSynchBeanImpl.afterCompletion.set(0);
+    }
+
+    @Test // Throws ConcurrentAccessException if callbacks are not serialized
+    public void testSerializationOfBeanMethodsAndCallbacks() throws Exception {
+        SessionSynchBeanImpl syncTestBean = lookup(SessionSynchBeanImpl.class);
+        try {
+            utx.setTransactionTimeout(5);
+            utx.begin();
+            for (int j = 0; j < 5; j++) {
+                syncTestBean.method1();
+                syncTestBean.method2();
             }
-            Assert.assertEquals(1, SessionSynchBeanImpl.afterBegin.get());
-            Assert.assertEquals(1, SessionSynchBeanImpl.afterCompletion.get());
+            utx.commit();
+        } catch (EJBTransactionRolledbackException e) {
+            Assert.assertTrue(e.getMessage().startsWith("WFLYEJB0487"));
         }
+        Assert.assertEquals(1, SessionSynchBeanImpl.afterBegin.get());
+        Assert.assertEquals(1, SessionSynchBeanImpl.afterCompletion.get());
+    }
+
+    @Test
+    public void testAllCallbacksAreCalled() throws Exception {
+        SessionSynchBeanImpl syncTestBean = lookup(SessionSynchBeanImpl.class);
+        utx.begin();
+        for (int j = 0; j < 2; j++) {
+            syncTestBean.method1();
+            syncTestBean.method2();
+        }
+        utx.commit();
+        Assert.assertEquals(1, SessionSynchBeanImpl.afterBegin.get());
+        Assert.assertEquals(1, SessionSynchBeanImpl.beforeCompletion.get());
+        Assert.assertEquals(1, SessionSynchBeanImpl.afterCompletion.get());
+    }
 
     protected <T> T lookup(Class<T> beanType) throws NamingException {
         return beanType

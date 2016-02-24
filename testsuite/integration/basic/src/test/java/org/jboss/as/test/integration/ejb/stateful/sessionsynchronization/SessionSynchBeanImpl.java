@@ -26,7 +26,6 @@ import javax.ejb.ConcurrentAccessException;
 import javax.ejb.EJBException;
 import javax.ejb.SessionSynchronization;
 import javax.ejb.Stateful;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -74,7 +73,7 @@ public class SessionSynchBeanImpl implements SessionSynchronization {
             throw new ConcurrentAccessException(getExceptionMessage(i, methodName));
 
         try {
-            Thread.sleep(new Random().nextInt(5000));
+            Thread.sleep(5000);
         } catch (InterruptedException ignore) {
         }
 

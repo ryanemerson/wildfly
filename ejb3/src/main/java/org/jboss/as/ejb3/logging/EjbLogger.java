@@ -39,6 +39,7 @@ import javax.ejb.ConcurrentAccessTimeoutException;
 import javax.ejb.EJBAccessException;
 import javax.ejb.EJBException;
 import javax.ejb.EJBTransactionRequiredException;
+import javax.ejb.EJBTransactionRolledbackException;
 import javax.ejb.IllegalLoopbackException;
 import javax.ejb.LockType;
 import javax.ejb.NoMoreTimeoutsException;
@@ -3114,4 +3115,7 @@ public interface EjbLogger extends BasicLogger {
             "As a result the 'default-sfsb-cache' attribute has been set to '%s' and the " +
             "'default-sfsb-passivation-disabled-cache' attribute has been set to '%s'.")
     void remappingCacheAttributes(String address, ModelNode defClustered, ModelNode passivationDisabled);
+
+    @Message(id = 487, value = "Caller Transaction '%s' has already rolled back")
+    EJBTransactionRolledbackException callerTransactionAlreadyRolledBack(Transaction tx);
 }

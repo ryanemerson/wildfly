@@ -250,6 +250,9 @@ public class CMTTxInterceptor implements Interceptor {
     }
 
     protected Object invokeInCallerTx(InterceptorContext invocation, Transaction tx, final EJBComponent component) throws Exception {
+        if (tx.getStatus() == Status.STATUS_ROLLEDBACK)
+           throw EjbLogger.ROOT_LOGGER.callerTransactionAlreadyRolledBack(tx);
+
         try {
             return invocation.proceed();
         } catch (Throwable t) {

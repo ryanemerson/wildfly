@@ -39,6 +39,7 @@ import javax.transaction.Synchronization;
 import javax.transaction.TransactionSynchronizationRegistry;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.jboss.as.ejb3.component.stateful.StatefulComponentInstanceInterceptor.getComponentInstance;
@@ -186,7 +187,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                     }
                 }
                 if (instance.delayedAfterCompletion().compareAndSet(true, false)) {
-                    final int status = -1; // FIXME!
+                    final int status = instance.afterCompletionStatus().get();
                     executeAfterCompletion(instance, status);
                 }
             }
@@ -279,10 +280,12 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
         @Override
         public void afterCompletion(int status) {
             final AtomicBoolean delayedAfterCompletion = statefulSessionComponentInstance.delayedAfterCompletion();
+            final AtomicInteger afterCompletionStatus = statefulSessionComponentInstance.afterCompletionStatus();
             final ReentrantLock threadLock = statefulSessionComponentInstance.getThreadLock();
 
             delayedAfterCompletion.set(true);
             if (!threadLock.tryLock()) {
+                afterCompletionStatus.set(status);
                 return;
             }
             try {

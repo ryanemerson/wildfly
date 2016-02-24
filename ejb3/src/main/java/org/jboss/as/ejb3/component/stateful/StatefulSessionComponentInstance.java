@@ -34,6 +34,7 @@ import org.jboss.invocation.Interceptor;
 import org.jboss.invocation.InterceptorContext;
 
 import javax.ejb.EJBException;
+import javax.transaction.Status;
 import javax.transaction.Transaction;
 import java.io.ObjectStreamException;
 import java.lang.reflect.Method;
@@ -41,6 +42,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -73,7 +75,8 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
      */
     private boolean synchronizationRegistered = false;
 
-    private AtomicBoolean delayedAfterCompletion = new AtomicBoolean(false);
+    private final AtomicBoolean delayedAfterCompletion = new AtomicBoolean(false);
+    private final AtomicInteger afterCompletionStatus = new AtomicInteger(-1);
 
     /**
      * The thread based lock for the stateful bean
@@ -238,5 +241,9 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
 
     AtomicBoolean delayedAfterCompletion() {
         return delayedAfterCompletion;
+    }
+
+    AtomicInteger afterCompletionStatus() {
+        return afterCompletionStatus;
     }
 }

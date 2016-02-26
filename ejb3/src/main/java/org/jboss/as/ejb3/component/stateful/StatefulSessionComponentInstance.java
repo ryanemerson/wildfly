@@ -78,6 +78,11 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     private final Object threadLock = new Object();
     private boolean removed = false;
 
+    /**
+     * Current state of this SFSB - whether it is executing a callback, method or has completed
+     */
+    private final SessionSynchStateMachine stateMachine = new SessionSynchStateMachine(this);
+
     boolean isSynchronizationRegistered() {
         return synchronizationRegistered;
     }
@@ -231,5 +236,9 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     @Override
     public void setCacheContext(Object context) {
         this.setInstanceData(Contextual.class, context);
+    }
+
+    SessionSynchStateMachine getStateMachine() {
+        return stateMachine;
     }
 }

@@ -107,6 +107,11 @@ public class StatefulSessionSynchronizationInterceptorTestCase {
 
         when(transactionSynchronizationRegistry.getTransactionKey()).thenReturn("TX2");
 
+        // new StatefulSessionComponentInstance required, otherwise the statemachine of instance will be set to COMPLETE/EJB_FINISHED
+        // and a EJBTransactionRolledBackException will be called. This does not happen in practice as a new Instance is created for each SFSB session
+        final StatefulSessionComponentInstance instance2 = new StatefulSessionComponentInstance(component, org.jboss.invocation.Interceptors.getTerminalInterceptor(), Collections.EMPTY_MAP, Collections.emptyMap());
+        context.putPrivateData(ComponentInstance.class, instance2);
+
         interceptor.processInvocation(context);
     }
 }

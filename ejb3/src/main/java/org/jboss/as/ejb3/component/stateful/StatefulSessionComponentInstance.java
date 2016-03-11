@@ -23,6 +23,7 @@ package org.jboss.as.ejb3.component.stateful;
 
 import java.io.ObjectStreamException;
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -77,6 +78,11 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
      */
     private final Object threadLock = new Object();
     private boolean removed = false;
+
+    // Int packing layout
+    // TxStatus | Delayed
+    // 4 bits   | 1 bit
+    private final AtomicInteger afterCompletionDelayed = new AtomicInteger(0);
 
     boolean isSynchronizationRegistered() {
         return synchronizationRegistered;
@@ -231,5 +237,29 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     @Override
     public void setCacheContext(Object context) {
         this.setInstanceData(Contextual.class, context);
+    }
+
+    // 0 == false, otherwise true and int is txStatus
+    // Tx STATUS_ACTIVE == 0, however afterCompletion will never be called with this status so not considered
+    int afterCompletionStatus() {
+        for (;;) {
+            int allState = afterCompletionDelayed.get();
+
+            // Not delayed, so return 0
+            if (allState == 0)
+                return 0;
+
+            int txStatus = allState >>> 1;
+            if (afterCompletionDelayed.compareAndSet(allState, 0)) {
+                if (txStatus < 0)
+                    throw new java.lang.IllegalStateException("StatefulSessionComponentInstance::afterCompletionStatus should not be < 0");
+                return txStatus;
+            }
+        }
+    }
+
+    boolean delayAfterCompletion(int status) {
+        int packedInt = (status << 1) | 1;
+        return afterCompletionDelayed.compareAndSet(0, packedInt);
     }
 }

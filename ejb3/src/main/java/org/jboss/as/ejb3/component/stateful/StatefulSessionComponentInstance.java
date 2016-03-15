@@ -26,6 +26,7 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.ejb.EJBException;
 import javax.transaction.Transaction;
@@ -77,6 +78,16 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
      */
     private final Object threadLock = new Object();
     private boolean removed = false;
+
+    /**
+     * Current state of this SFSB - whether it is executing a callback, method or has completed
+     */
+    public static final byte SYNCH_STATE_NO_INVOCATION = 0;
+    public static final byte SYNCH_STATE_INVOCATION_IN_PROGRESS = 1;
+    public static final byte SYNCH_STATE_AFTER_COMPLETION_DELAYED = 2;
+    public static final byte SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS = 3;
+    private final AtomicInteger invocationSynchState = new AtomicInteger(SYNCH_STATE_NO_INVOCATION);
+    private volatile int afterCompletionStatus = -1;
 
     boolean isSynchronizationRegistered() {
         return synchronizationRegistered;
@@ -231,5 +242,17 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     @Override
     public void setCacheContext(Object context) {
         this.setInstanceData(Contextual.class, context);
+    }
+
+    AtomicInteger getInvocationSynchState() {
+        return invocationSynchState;
+    }
+
+    public int getAfterCompletionStatus() {
+        return afterCompletionStatus;
+    }
+
+    public void setAfterCompletionStatus(int afterCompletionStatus) {
+        this.afterCompletionStatus = afterCompletionStatus;
     }
 }

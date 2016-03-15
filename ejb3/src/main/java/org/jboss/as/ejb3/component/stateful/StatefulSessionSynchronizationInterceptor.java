@@ -175,9 +175,12 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                     } else if (synchState.compareAndSet(SYNCH_STATE_INVOCATION_IN_PROGRESS, SYNCH_STATE_NO_INVOCATION)) {
                         break;
                     } else if (synchState.compareAndSet(SYNCH_STATE_AFTER_COMPLETION_DELAYED, SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS)) {
-                        executeAfterCompletion(instance, instance.getAfterCompletionStatus());
-                        instance.setAfterCompletionStatus(-1);
-                        break;
+                        try {
+                            executeAfterCompletion(instance, instance.getAfterCompletionStatus());
+                            break;
+                        } finally {
+                            synchState.compareAndSet(SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS, SYNCH_STATE_NO_INVOCATION);
+                        }
                     }
                 }
             }
@@ -313,15 +316,18 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
             for (;;) {
                 AtomicInteger synchState = statefulSessionComponentInstance.getInvocationSynchState();
 
+                // Only need to set this state here, as it is guaranteed that if getAfterCompletionStatus is called, it will always
+                // happen after this statement. Hence no need to reset status to -1
+                statefulSessionComponentInstance.setAfterCompletionStatus(status);
                 if (synchState.compareAndSet(SYNCH_STATE_INVOCATION_IN_PROGRESS, SYNCH_STATE_AFTER_COMPLETION_DELAYED)) {
-                    statefulSessionComponentInstance.setAfterCompletionStatus(status);
                     break;
                 } else if (synchState.compareAndSet(SYNCH_STATE_NO_INVOCATION, SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS)) {
-                    executeAfterCompletion(statefulSessionComponentInstance, status);
-                    if (!synchState.compareAndSet(SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS, SYNCH_STATE_NO_INVOCATION)) {
-                        throw new IllegalStateException("Expected state 'SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS'");
+                    try {
+                        executeAfterCompletion(statefulSessionComponentInstance, status);
+                        break;
+                    } finally {
+                        synchState.compareAndSet(SYNCH_STATE_AFTER_COMPLETION_IN_PROGRESS, SYNCH_STATE_NO_INVOCATION);
                     }
-                    break;
                 }
             }
         }

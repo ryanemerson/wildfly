@@ -248,11 +248,11 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
         return invocationSynchState;
     }
 
-    public int getAfterCompletionStatus() {
+    int getAfterCompletionStatus() {
         return afterCompletionStatus;
     }
 
-    public void setAfterCompletionStatus(int afterCompletionStatus) {
+    void setAfterCompletionStatus(int afterCompletionStatus) {
         this.afterCompletionStatus = afterCompletionStatus;
     }
 }

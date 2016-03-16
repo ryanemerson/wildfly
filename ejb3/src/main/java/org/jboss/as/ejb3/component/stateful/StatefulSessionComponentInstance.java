@@ -82,7 +82,6 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
     private final ReentrantLock threadLock = new ReentrantLock();
     private final ReentrantLock invocationLock = new ReentrantLock();
     private final Queue<Integer> callbackQueue = new ConcurrentLinkedQueue<>();
-    private final AtomicInteger invocationCount = new AtomicInteger(0);
     private boolean removed = false;
 
     boolean isSynchronizationRegistered() {
@@ -103,10 +102,6 @@ public class StatefulSessionComponentInstance extends SessionBeanComponentInstan
 
     Queue<Integer> getCallbackQueue() {
         return callbackQueue;
-    }
-
-    AtomicInteger getInvocationCount() {
-        return invocationCount;
     }
 
     OwnableReentrantLock getLock() {

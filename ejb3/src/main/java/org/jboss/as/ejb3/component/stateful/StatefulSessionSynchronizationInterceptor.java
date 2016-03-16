@@ -104,7 +104,6 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 //the inner BMT interceptor is going to setup the correct transaction anyway
                 //so enrolling in an existing transaction is not correct
                 if (containerManagedTransactions) {
-                    instance.getInvocationCount().incrementAndGet();
                     final int status = transactionSynchronizationRegistry.getTransactionStatus();
 
                     // If no synch has been registered yet, then afterCompletion is never called
@@ -156,10 +155,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
                 invocationLock.unlock();
                 if (containerManagedTransactions) {
-                    int invocationCount = instance.getInvocationCount().decrementAndGet();
-                    if (invocationCount == 0) {
-                        executeAfterCompletion(instance);
-                    }
+                    executeAfterCompletion(instance);
                 }
             }
         } finally {
@@ -308,12 +304,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
             if (!invocationLock.tryLock())
                 return;
 
-            if (!threadLock.tryLock()) {
-                invocationLock.unlock();
-                return;
-            }
-
-            // Separate if statements above in order to avoid nested try/finally blocks
+            threadLock.lock();
             try {
                 executeAfterCompletion(statefulSessionComponentInstance);
             } finally {

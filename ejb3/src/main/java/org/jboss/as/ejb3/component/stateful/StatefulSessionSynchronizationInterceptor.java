@@ -92,6 +92,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
         Object currentTransactionKey = null;
         invocationLock.lock();
+        boolean lockReleased = false;
         threadLock.lock();
         try {
             if (ROOT_LOGGER.isTraceEnabled()) {
@@ -153,9 +154,10 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                     }
                 }
                 invocationLock.unlock();
+                lockReleased = true;
             }
         } finally {
-            checkForDelayedAfterCompletion(instance, invocationLock, currentTransactionKey);
+            checkForDelayedAfterCompletion(instance, invocationLock, currentTransactionKey, !lockReleased);
             threadLock.unlock();
         }
     }
@@ -202,9 +204,9 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
     }
 
     private void checkForDelayedAfterCompletion(final StatefulSessionComponentInstance statefulSessionComponentInstance,
-            final ReentrantLock invocationLock, final Object currentTransactionKey) {
+            final ReentrantLock invocationLock, final Object currentTransactionKey, final boolean releaseLock) {
         // Should only be necessary if an exception has been called in the invocations finally statement
-        if (invocationLock.isHeldByCurrentThread())
+        if (releaseLock)
             invocationLock.unlock();
 
         if (containerManagedTransactions) {

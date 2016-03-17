@@ -92,7 +92,6 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
         Object currentTransactionKey = null;
         invocationLock.lock();
-        boolean lockReleased = false;
         threadLock.lock();
         try {
             if (ROOT_LOGGER.isTraceEnabled()) {
@@ -153,12 +152,14 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                         instance.getComponent().getCache().release(instance);
                     }
                 }
-                invocationLock.unlock();
-                lockReleased = true;
             }
         } finally {
-            checkForDelayedAfterCompletion(instance, invocationLock, currentTransactionKey, !lockReleased);
-            threadLock.unlock();
+            try {
+                invocationLock.unlock();
+                checkForDelayedAfterCompletion(instance, invocationLock, currentTransactionKey);
+            } finally {
+                threadLock.unlock();
+            }
         }
     }
 
@@ -204,19 +205,15 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
     }
 
     private void checkForDelayedAfterCompletion(final StatefulSessionComponentInstance statefulSessionComponentInstance,
-            final ReentrantLock invocationLock, final Object currentTransactionKey, final boolean releaseLock) {
-        // Should only be necessary if an exception has been called in the invocations finally statement
-        if (releaseLock)
-            invocationLock.unlock();
-
-        if (containerManagedTransactions) {
+            final ReentrantLock invocationLock, final Object currentTransactionKey) {
+        if (containerManagedTransactions && invocationLock.getHoldCount() == 0) {
             Integer callbackStatus = statefulSessionComponentInstance.getCallbackQueue().poll();
             if (callbackStatus != null) {
                 try {
                     executeAfterCompletion(statefulSessionComponentInstance, callbackStatus);
-                } catch (Exception e) {
+                } catch (Throwable t) {
                     // We do not return this exception to the client, as this would not occur if executed by the Tx reaper thread
-                    ROOT_LOGGER.exceptionThrownInDelayedAfterCompletion(e, currentTransactionKey);
+                    ROOT_LOGGER.exceptionThrownInDelayedAfterCompletion(t, currentTransactionKey);
                 }
             }
         }

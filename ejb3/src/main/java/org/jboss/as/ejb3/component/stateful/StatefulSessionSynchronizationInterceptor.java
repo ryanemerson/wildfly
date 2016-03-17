@@ -39,7 +39,6 @@ import org.jboss.invocation.InterceptorFactory;
 import org.jboss.invocation.InterceptorFactoryContext;
 
 import java.util.Queue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.jboss.as.ejb3.logging.EjbLogger.ROOT_LOGGER;
@@ -91,6 +90,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
             throw EjbLogger.ROOT_LOGGER.failToObtainLock(component.getComponentName(), timeout.getValue(), timeout.getTimeUnit());
         }
 
+        Object currentTransactionKey = null;
         invocationLock.lock();
         threadLock.lock();
         try {
@@ -113,7 +113,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                     }
                     if (!instance.isSynchronizationRegistered()) {
                         // get the key to current transaction associated with this thread
-                        Object currentTransactionKey = transactionSynchronizationRegistry.getTransactionKey();
+                        currentTransactionKey = transactionSynchronizationRegistry.getTransactionKey();
                         // if this SFSB instance is already associated with a different transaction, then it's an error
                         // if the thread is currently associated with a tx, then register a tx synchronization
                         if (currentTransactionKey != null && status != Status.STATUS_COMMITTED && status != Status.STATUS_ROLLEDBACK) {
@@ -155,13 +155,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 invocationLock.unlock();
             }
         } finally {
-            // Should only be necessary in exceptional circumstances
-            if (invocationLock.isLocked())
-                invocationLock.unlock();
-
-            if (containerManagedTransactions) {
-                executeAfterCompletion(instance);
-            }
+            checkForDelayedAfterCompletion(instance, invocationLock, currentTransactionKey);
             threadLock.unlock();
         }
     }
@@ -207,10 +201,22 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
         }
     }
 
-    private void executeAfterCompletion(final StatefulSessionComponentInstance statefulSessionComponentInstance) {
-        Integer callbackStatus = statefulSessionComponentInstance.getCallbackQueue().poll();
-        if (callbackStatus != null) {
-            executeAfterCompletion(statefulSessionComponentInstance, callbackStatus);
+    private void checkForDelayedAfterCompletion(final StatefulSessionComponentInstance statefulSessionComponentInstance,
+            final ReentrantLock invocationLock, final Object currentTransactionKey) {
+        // Should only be necessary if an exception has been called in the invocations finally statement
+        if (invocationLock.isHeldByCurrentThread())
+            invocationLock.unlock();
+
+        if (containerManagedTransactions) {
+            Integer callbackStatus = statefulSessionComponentInstance.getCallbackQueue().poll();
+            if (callbackStatus != null) {
+                try {
+                    executeAfterCompletion(statefulSessionComponentInstance, callbackStatus);
+                } catch (Exception e) {
+                    // We do not return this exception to the client, as this would not occur if executed by the Tx reaper thread
+                    ROOT_LOGGER.exceptionThrownInDelayedAfterCompletion(e, currentTransactionKey);
+                }
+            }
         }
     }
 
@@ -309,7 +315,10 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
 
             threadLock.lock();
             try {
-                executeAfterCompletion(statefulSessionComponentInstance);
+                Integer callbackStatus = statefulSessionComponentInstance.getCallbackQueue().poll();
+                if (callbackStatus != null) {
+                    executeAfterCompletion(statefulSessionComponentInstance, callbackStatus);
+                }
             } finally {
                 threadLock.unlock();
                 invocationLock.unlock();

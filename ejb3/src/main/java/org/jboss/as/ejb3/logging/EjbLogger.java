@@ -3118,4 +3118,8 @@ public interface EjbLogger extends BasicLogger {
 
     @Message(id = 487, value = "Cannot invoke EJB method, as its parent transaction has already completed with exit status %d.")
     EJBTransactionRolledbackException transactionNoLongerActive(int txStatus);
+
+    @LogMessage(level = ERROR)
+    @Message(id = 488, value = "Exception encountered when executing delayed afterCompletion callback for transaction %s")
+    void exceptionThrownInDelayedAfterCompletion(@Cause Throwable cause, Object txKey);
 }

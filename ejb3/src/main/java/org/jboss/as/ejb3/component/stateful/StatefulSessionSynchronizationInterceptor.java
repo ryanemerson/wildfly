@@ -39,6 +39,7 @@ import org.jboss.invocation.InterceptorFactory;
 import org.jboss.invocation.InterceptorFactoryContext;
 
 import java.util.Queue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static org.jboss.as.ejb3.logging.EjbLogger.ROOT_LOGGER;
@@ -97,7 +98,6 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                 ROOT_LOGGER.trace("Acquired lock: " + lock + " for stateful component instance: " + instance + " during invocation: " + context);
             }
 
-            Object currentTransactionKey = null;
             boolean wasTxSyncRegistered = false;
             try {
                 //we never register a sync for bean managed transactions
@@ -113,7 +113,7 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                     }
                     if (!instance.isSynchronizationRegistered()) {
                         // get the key to current transaction associated with this thread
-                        currentTransactionKey = transactionSynchronizationRegistry.getTransactionKey();
+                        Object currentTransactionKey = transactionSynchronizationRegistry.getTransactionKey();
                         // if this SFSB instance is already associated with a different transaction, then it's an error
                         // if the thread is currently associated with a tx, then register a tx synchronization
                         if (currentTransactionKey != null && status != Status.STATUS_COMMITTED && status != Status.STATUS_ROLLEDBACK) {
@@ -152,13 +152,16 @@ public class StatefulSessionSynchronizationInterceptor extends AbstractEJBInterc
                         instance.getComponent().getCache().release(instance);
                     }
                 }
-
                 invocationLock.unlock();
-                if (containerManagedTransactions) {
-                    executeAfterCompletion(instance);
-                }
             }
         } finally {
+            // Should only be necessary in exceptional circumstances
+            if (invocationLock.isLocked())
+                invocationLock.unlock();
+
+            if (containerManagedTransactions) {
+                executeAfterCompletion(instance);
+            }
             threadLock.unlock();
         }
     }
